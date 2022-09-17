@@ -6,13 +6,42 @@ CELL = 32
 FPS = 30
 WIDTH, HEIGHT = SIZE[0] // CELL, SIZE[1] // CELL
 
+EMPTY = " "
+WALL = "*"
+
 def init():
     pygame.init()
     global Screen
     Screen = pygame.display.set_mode(SIZE)
 
+
+class Map:
+    def __init__(self, data=None):
+        self.size = WIDTH, HEIGHT
+        self.data = data or ([EMPTY] * (WIDTH * HEIGHT))
+        if not data:
+            self.default_map_start()
+
+    def default_map_start(self):
+        self[1, 1] = WALL
+
+    def __getitem__(self, pos):
+        return self.data[pos[0] + pos[1] * self.size[0]]
+
+    def __setitem__(self, pos, value):
+        self.data[pos[0] + pos[1] * self.size[0]] = value
+
+    def draw(self):
+        for y in range(self.size[1]):
+            for x in range(self.size[0]):
+                if self[x, y] == WALL:
+                    pygame.draw.rect(Screen, (255, 255, 255), (x * CELL, y * CELL, CELL, CELL))
+
+
+
 class Character:
-    def __init__(self, initial_pos=None):
+    def __init__(self, map, initial_pos=None):
+        self.map = map
         self.ox, self.oy = self.x, self.y = initial_pos or (0,0)
         self.vx, self.vy = 0, 0
 
@@ -36,22 +65,31 @@ class Character:
 
     def update(self):
         self.ox, self.oy = self.x, self.y
+        x, y = self.x, self.y
 
-        if 0 <= self.x + self.vx < WIDTH:
-            self.x += self.vx
-        if 0 <= self.y + self.vy < HEIGHT:
-            self.y += self.vy
+        x += self.vx
+        y += self.vy
+        if not (0 <= x < WIDTH) or not (0 <= y < HEIGHT):
+            return
+
+        if self.map[x, y]    != EMPTY:
+            return
+
+        self.x, self.y = x, y
+
 
     def draw(self):
-        pygame.draw.rect(Screen, (0, 0,0), (self.ox * CELL, self.oy * CELL, CELL, CELL))
+        pygame.draw.rect(Screen, (0, 0, 0), (self.ox * CELL, self.oy * CELL, CELL, CELL))
         pygame.draw.rect(Screen, (255, 255,0), (self.x * CELL, self.y * CELL, CELL, CELL))
 
 
 def main():
     clock = pygame.time.Clock()
+    game_map = Map()
 
-    character = Character()
+    character = Character(game_map)
 
+    game_map.draw()
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
