@@ -14,6 +14,7 @@ def main():
     clock = pygame.time.Clock()
 
     x, y = 0, 0
+    ox, oy = 0, 0
     vx, vy = 0, 0
     while True:
         for event in pygame.event.get():
@@ -40,8 +41,10 @@ def main():
         x += vx
         y += vy
 
+        pygame.draw.rect(Screen, (0, 0,0), (ox * CELL, oy * CELL, CELL, CELL))
         pygame.draw.rect(Screen, (255, 255,0), (x * CELL, y * CELL, CELL, CELL))
 
+        ox, oy = x, y
         pygame.display.update()
         clock.tick(FPS)
 
