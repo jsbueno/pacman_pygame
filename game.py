@@ -14,6 +14,7 @@ def main():
     clock = pygame.time.Clock()
 
     x, y = 0, 0
+    vx, vy = 0, 0
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -21,15 +22,23 @@ def main():
             elif event.type == pygame.KEYDOWN:
                 key = event.key
                 if key == pygame.K_LEFT:
-                    x -= 1
+                    vx = -1
                 elif key == pygame.K_RIGHT:
-                    x += 1
+                    vx = 1
                 if key == pygame.K_UP:
-                    y -= 1
+                    vy = -1
                 elif key == pygame.K_DOWN:
-                    y += 1
+                    vy = 1
                 if key == pygame.K_ESCAPE:
                     return
+            if event.type == pygame.KEYUP:
+                key = event.key
+                if key in (pygame.K_LEFT, pygame.K_RIGHT):
+                    vx = 0
+                if key in (pygame.K_UP, pygame.K_DOWN):
+                    vy = 0
+        x += vx
+        y += vy
 
         pygame.draw.rect(Screen, (255, 255,0), (x * CELL, y * CELL, CELL, CELL))
 
