@@ -1,3 +1,5 @@
+import random
+
 import pygame
 
 SIZE = 800, 600
@@ -14,6 +16,11 @@ def init():
     global Screen
     Screen = pygame.display.set_mode(SIZE)
 
+WALL_DIRECTIONS = {
+    "down": (0, 1),
+    "left": (-1, 0),
+    "right": (1, 0),
+}
 
 class Map:
     def __init__(self, data=None):
@@ -23,7 +30,31 @@ class Map:
             self.default_map_start()
 
     def default_map_start(self):
-        self[1, 1] = WALL
+        self.random_map()
+        self.frame()
+
+    def random_map(self, seed=None, doors_per_col=3):
+        seed = 0 if seed is None else seed
+
+        for col in range(2, WIDTH - 1, 2):
+            doors = set(random.sample(range(2, HEIGHT - 1, 2), doors_per_col))
+            for row in range(0, HEIGHT, 2):
+                self[col, row] = WALL
+                if row not in doors:
+                    direction = random.choice(list(WALL_DIRECTIONS.values()))
+                    x = col + direction[0]
+                    y = row + direction[1]
+                    self[x, y] = WALL
+
+    def frame(self):
+        # linhas de cima e de baixo:
+        for x in range(WIDTH):
+            self[x, 0] = WALL
+            self[x, HEIGHT - 1] = WALL
+
+        for y in range(HEIGHT):
+            self[0, y] = WALL
+            self[WIDTH - 1, y] = WALL
 
     def __getitem__(self, pos):
         return self.data[pos[0] + pos[1] * self.size[0]]
@@ -64,19 +95,26 @@ class Character:
                 self.vy = 0
 
     def update(self):
-        self.ox, self.oy = self.x, self.y
+        ox, oy = self.ox, self.oy = self.x, self.y
         x, y = self.x, self.y
+        x_ok = y_ok = True
 
         x += self.vx
         y += self.vy
         if not (0 <= x < WIDTH) or not (0 <= y < HEIGHT):
             return
 
-        if self.map[x, y]    != EMPTY:
-            return
-
-        self.x, self.y = x, y
-
+        if self.map[x, y] != EMPTY:
+            if self.map[ox, y] == EMPTY:
+                x_ok = False
+            elif self.map[x, oy] == EMPTY:
+                y_ok = False
+            else:
+                x_ok = y_ok = False
+        if x_ok:
+            self.x = x
+        if y_ok:
+            self.y = y
 
     def draw(self):
         pygame.draw.rect(Screen, (0, 0, 0), (self.ox * CELL, self.oy * CELL, CELL, CELL))
@@ -87,7 +125,7 @@ def main():
     clock = pygame.time.Clock()
     game_map = Map()
 
-    character = Character(game_map)
+    character = Character(game_map, (1,1))
 
     game_map.draw()
     while True:
