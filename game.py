@@ -1,4 +1,5 @@
 import random
+from pathlib import Path
 
 import pygame
 
@@ -12,9 +13,11 @@ EMPTY = " "
 WALL = "*"
 
 def init():
+    global Screen, BG
     pygame.init()
-    global Screen
     Screen = pygame.display.set_mode(SIZE)
+    BG = pygame.Surface(SIZE)
+    BG.fill((0,0,0))
 
 WALL_DIRECTIONS = {
     "down": (0, 1),
@@ -70,11 +73,46 @@ class Map:
 
 
 
-class Character:
+class Character(pygame.sprite.Sprite):
+    name = "pacman"
+
     def __init__(self, map, initial_pos=None):
         self.map = map
         self.ox, self.oy = self.x, self.y = initial_pos or (0,0)
         self.vx, self.vy = 0, 0
+        self.load_assets()
+
+        self.tick = 0
+        self.anim_cycle = 10
+        self.agility = 4
+
+        super().__init__()
+
+    def load_assets(self):
+        path = Path(__file__).parent / "assets"
+        pattern = f"{self.name}-left-{{:02d}}.png"
+        i = 0
+        image_list = []
+        while True:
+            full_path = path / pattern.format(i)
+            if full_path.exists():
+                img = pygame.image.load(full_path)
+                scale = CELL / img.get_size()[0]
+                img = pygame.transform.rotozoom(img, 0, scale)
+                image_list.append(img)
+            else:
+                break
+            i += 1
+        self.images = image_list
+
+
+    @property
+    def rect(self):
+        return pygame.Rect(self.x * CELL, self.y * CELL, CELL, CELL)
+
+    @property
+    def image(self):
+        return self.images[self.tick // self.anim_cycle % 2]
 
     def move_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -95,6 +133,9 @@ class Character:
                 self.vy = 0
 
     def update(self):
+        self.tick += 1
+        if self.tick % self.agility != 0:
+            return
         ox, oy = self.ox, self.oy = self.x, self.y
         x, y = self.x, self.y
         x_ok = y_ok = True
@@ -116,16 +157,15 @@ class Character:
         if y_ok:
             self.y = y
 
-    def draw(self):
-        pygame.draw.rect(Screen, (0, 0, 0), (self.ox * CELL, self.oy * CELL, CELL, CELL))
-        pygame.draw.rect(Screen, (255, 255,0), (self.x * CELL, self.y * CELL, CELL, CELL))
-
 
 def main():
     clock = pygame.time.Clock()
     game_map = Map()
 
     character = Character(game_map, (1,1))
+    characters = pygame.sprite.Group()
+    characters.add(character)
+
 
     game_map.draw()
     while True:
@@ -136,8 +176,9 @@ def main():
                 return
             if event.type in (pygame.KEYDOWN, pygame.KEYUP):
                 character.move_event(event)
-        character.update()
-        character.draw()
+        characters.update()
+        characters.clear(Screen, BG)
+        characters.draw(Screen)
 
         pygame.display.update()
         clock.tick(FPS)
