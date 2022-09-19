@@ -252,6 +252,11 @@ class Player(Character):
     def power_up(self):
         self.powered = True
         self.power_countdown = 10 * FPS
+        self.images = self.powered_images
+
+    def power_down(self):
+        self.powered = False
+        self.images = self.original_images
 
     def move_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -277,9 +282,22 @@ class Player(Character):
         if self.powered:
             self.power_countdown -= 1
             if self.power_countdown <= 0:
-                self.powered = False
+                self.power_down()
         super().update()
 
+    def load_assets(self):
+        super().load_assets()
+
+        powered_images = {}
+        for direction in self.images:
+            powered_images[direction] = []
+            for img in self.images[direction]:
+                new_img = img.copy()
+                new_img.fill((0, 255, 0, 0), special_flags=pygame.BLEND_RGBA_SUB)
+                powered_images[direction].append(new_img)
+
+        self.original_images = self.images
+        self.powered_images = powered_images
 
 class Ghost(Character):
     name = "ghost"
@@ -374,6 +392,12 @@ def gameover(game):
                     return True
                 elif event.key in (pygame.K_ESCAPE, pygame.K_q, pygame.K_n):
                     raise QuitGame()
+        try:
+            game.characters.update()
+        except PlayerDied:
+            pass
+        game.characters.clear(Screen, BG)
+        game.characters.draw(Screen)
         game.clock.tick(FPS)
 
 
