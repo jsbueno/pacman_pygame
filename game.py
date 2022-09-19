@@ -108,7 +108,7 @@ class Map:
 
 
 class Character(pygame.sprite.Sprite):
-    name = "pacman"
+    # name = "pacman"
 
     def __init__(self, map, initial_pos=None):
         self.map = map
@@ -174,6 +174,7 @@ class Character(pygame.sprite.Sprite):
                 self.vy = 0
 
     def update(self):
+
         self.tick += 1
         if self.tick % self.agility != 0:
             return
@@ -199,14 +200,37 @@ class Character(pygame.sprite.Sprite):
             self.y = y
 
 
+class Player(Character):
+    name = "pacman"
+
+class Ghost(Character):
+    name = "ghost"
+
+    def update(self):
+        if self.tick % 20 == 0:
+            self.vx, self.vy = random.choice([(1, 0), (0, -1), (-1, 0), (0, 1)])
+
+        super().update()
+
+        if self.map.player.x == self.x and self.map.player.y == self.y:
+            print("GAME OVER")
+            raise RuntimeError()
+
+
+
+
 def main():
     clock = pygame.time.Clock()
     game_map = Map()
 
-    character = Character(game_map, (1,1))
+    player = Player(game_map, (1,1))
     characters = pygame.sprite.Group()
-    characters.add(character)
+    characters.add(player)
 
+    for initial_pos in [(1, HEIGHT - 2), (WIDTH - 2, 1), (WIDTH -2, HEIGHT - 2)]:
+        characters.add(g:=Ghost(game_map, initial_pos))
+
+    game_map.player = player
 
     game_map.draw()
     while True:
@@ -216,7 +240,7 @@ def main():
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 return
             if event.type in (pygame.KEYDOWN, pygame.KEYUP):
-                character.move_event(event)
+                player.move_event(event)
         characters.update()
         characters.clear(Screen, BG)
         characters.draw(Screen)
