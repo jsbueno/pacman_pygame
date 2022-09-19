@@ -19,12 +19,24 @@ BG_COLOR = (0, 0, 0)
 DIRECTIONS = ([(1, 0), (0, -1), (-1, 0), (0, 1)])
 
 
+class GameException(Exception):
+    pass
+
+class PlayerDied(GameException):
+    pass
+
+class QuitGame(GameException):
+    pass
+
+
 def init():
-    global Screen, BG
+    global Screen, BG, BIGFONT, SMALLFONT
     pygame.init()
     Screen = pygame.display.set_mode(SIZE)
     BG = pygame.Surface(SIZE)
     BG.fill(BG_COLOR)
+    BIGFONT = pygame.font.Font(Path(__file__).parent / "assets/LiberationSans-Bold.ttf", SIZE[0] // 20)
+    SMALLFONT = pygame.font.Font(Path(__file__).parent / "assets/LiberationSans-Bold.ttf", SIZE[0] // 40)
 
 WALL_DIRECTIONS = {
     "down": (0, 1),
@@ -37,7 +49,8 @@ class Map:
     wall_width = CELL // 3
     color = WALL_COLOR
 
-    def __init__(self, data=None):
+    def __init__(self, game, data=None):
+        self.game = game
         self.size = WIDTH, HEIGHT
         self.data = data or ([EMPTY] * (WIDTH * HEIGHT))
         if not data:
@@ -105,16 +118,14 @@ class Map:
                 for segment in segments:
                     pygame.draw.rect(Screen, self.color, segment)
 
-                # pygame.draw.rect(Screen, (255, 255, 255), (x * CELL, y * CELL, CELL, CELL))
-
     @property
     def heat_map(self):
         last_checked = getattr(self, "last_checked", -1)
-        if last_checked == self.player.tick:
+        if last_checked == self.game.player.tick:
             return self.heat_map_data
-        self.last_checked = self.player.tick
+        self.last_checked = self.game.player.tick
 
-        target = self.player.x, self.player.y
+        target = self.game.player.x, self.game.player.y
         distance_map = {target: 0}
         observed_paths = set((target,))
         counter = 0
@@ -140,21 +151,17 @@ class Map:
                         distance_map[cursor] = current_distance + 1
                         new_paths.add(cursor)
             observed_paths = new_paths
-            print(observed_paths)
-            #if counter > 5:
-                #break
         self.heat_map_data = distance_map
         return distance_map
 
 
 class Character(pygame.sprite.Sprite):
-    # name = "pacman"
 
     agility = 12
     anim_cycle = 10
 
-    def __init__(self, map, initial_pos=None):
-        self.map = map
+    def __init__(self, game, initial_pos=None):
+        self.game = game
         self.ox, self.oy = self.x, self.y = initial_pos or (0,0)
         self.vx, self.vy = 0, 0
         self.ovx = 0
@@ -208,10 +215,10 @@ class Character(pygame.sprite.Sprite):
         if not (0 <= x < WIDTH) or not (0 <= y < HEIGHT):
             return
 
-        if self.map[x, y] != EMPTY:
-            if self.map[ox, y] == EMPTY:
+        if self.game.map[x, y] != EMPTY:
+            if self.game.map[ox, y] == EMPTY:
                 x_ok = False
-            elif self.map[x, oy] == EMPTY:
+            elif self.game.map[x, oy] == EMPTY:
                 y_ok = False
             else:
                 x_ok = y_ok = False
@@ -219,6 +226,14 @@ class Character(pygame.sprite.Sprite):
             self.x = x
         if y_ok:
             self.y = y
+
+
+class Item(Character):
+    pass
+
+
+class EnergyPill(Item):
+    name = "pill"
 
 
 class Player(Character):
@@ -250,7 +265,7 @@ class Ghost(Character):
 
     def best_path(self):
         best = 100_000
-        heat_map = self.map.heat_map
+        heat_map = self.game.map.heat_map
         choice = 0, 0
         for path in DIRECTIONS:
             path_pos = self.x + path[0], self.y + path[1]
@@ -267,43 +282,84 @@ class Ghost(Character):
 
         super().update()
 
-        if self.map.player.x == self.x and self.map.player.y == self.y:
-            print("GAME OVER")
-            raise RuntimeError()
+        if self.game.player.x == self.x and self.game.player.y == self.y:
+            raise PlayerDied()
 
     @property
     def image(self):
         return self.images[0, 0][self.tick // self.anim_cycle % 2]
 
 
-def main():
-    clock = pygame.time.Clock()
-    game_map = Map()
+class Game:
+    def __init__(self):
+        self.clock = pygame.time.Clock()
+        self.map = Map(self)
 
-    player = Player(game_map, (1,1))
-    characters = pygame.sprite.Group()
-    characters.add(player)
+        self.player = Player(self, (1,1))
 
-    for initial_pos in [(1, HEIGHT - 2), (WIDTH - 2, 1), (WIDTH -2, HEIGHT - 2)]:
-        characters.add(g:=Ghost(game_map, initial_pos))
+        self.characters = pygame.sprite.Group()
+        self.characters.add(self.player)
 
-    game_map.player = player
+        for initial_pos in [(1, HEIGHT - 2), (WIDTH - 2, 1), (WIDTH -2, HEIGHT - 2)]:
+            self.characters.add(Ghost(self, initial_pos))
 
-    game_map.draw()
+        self.characters.add(EnergyPill(self, (5,5)))
+
+        self.map.draw()
+
+    def mainloop(self):
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    raise QuitGame()
+                elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    raise QuitGame()
+                if event.type in (pygame.KEYDOWN, pygame.KEYUP):
+                    self.player.move_event(event)
+            self.characters.update()
+            self.characters.clear(Screen, BG)
+            self.characters.draw(Screen)
+
+            pygame.display.update()
+            self.clock.tick(FPS)
+
+def gameover(game):
+
+    text1 = BIGFONT.render("GAME OVER", True, (0, 255, 192))
+    text2 = SMALLFONT.render("Play Again (y/n)", True, (0, 255, 192))
+    w, h = text1.get_size()
+    x, y = SIZE[0] // 2 - w //2, SIZE[1] // 2 - h // 2
+
+    w, h = text2.get_size()
+    x2 = SIZE[0] // 2 - w //2
+    y2 = y + SIZE[1] // 6
+
+    Screen.blit(text1, (x, y))
+    Screen.blit(text2, (x2, y2))
     while True:
+        pygame.display.update()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                return
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                return
-            if event.type in (pygame.KEYDOWN, pygame.KEYUP):
-                player.move_event(event)
-        characters.update()
-        characters.clear(Screen, BG)
-        characters.draw(Screen)
+                raise QuitGame()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_y:
+                    return True
+                elif event.key in (pygame.K_ESCAPE, pygame.K_q, pygame.K_n):
+                    raise QuitGame()
+        game.clock.tick(FPS)
 
-        pygame.display.update()
-        clock.tick(FPS)
+
+def main():
+    while True:
+        game = Game()
+        try:
+            game.mainloop()
+        except PlayerDied:
+            try:
+                gameover(game)
+            except QuitGame:
+                break
+        Screen.fill(BG_COLOR)
 
 
 if __name__ == "__main__":
