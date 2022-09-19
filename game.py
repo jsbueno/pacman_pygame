@@ -16,6 +16,8 @@ OUTSIDE = "#"
 WALL_COLOR = (255, 255, 255)
 BG_COLOR = (0, 0, 0)
 
+DIRECTIONS = ([(1, 0), (0, -1), (-1, 0), (0, 1)])
+
 
 def init():
     global Screen, BG
@@ -105,10 +107,51 @@ class Map:
 
                 # pygame.draw.rect(Screen, (255, 255, 255), (x * CELL, y * CELL, CELL, CELL))
 
+    @property
+    def heat_map(self):
+        last_checked = getattr(self, "last_checked", -1)
+        if last_checked == self.player.tick:
+            return self.heat_map_data
+        self.last_checked = self.player.tick
+
+        target = self.player.x, self.player.y
+        distance_map = {target: 0}
+        observed_paths = set((target,))
+        counter = 0
+        while observed_paths:
+            counter += 1
+            new_paths = set()
+            for head in observed_paths:
+                current_distance = distance_map[head]
+                for neighbor in DIRECTIONS:
+                    cursor = head[0] + neighbor[0], head[1] + neighbor[1]
+                    if self[cursor] != EMPTY:
+                        continue
+                    if (cursor_distance:=distance_map.get(cursor, None)) != None:
+                        if cursor_distance == current_distance - 1:
+                            continue
+                        if cursor_distance < current_distance - 1:
+                            distance_map[head] = cursor_distance + 1
+                            new_paths.add(head)
+                        elif cursor_distance > current_distance + 1:
+                            distance[cursor] = currrent_distance + 1
+                            new_paths.add(cursor)
+                    else:
+                        distance_map[cursor] = current_distance + 1
+                        new_paths.add(cursor)
+            observed_paths = new_paths
+            print(observed_paths)
+            #if counter > 5:
+                #break
+        self.heat_map_data = distance_map
+        return distance_map
 
 
 class Character(pygame.sprite.Sprite):
     # name = "pacman"
+
+    agility = 12
+    anim_cycle = 10
 
     def __init__(self, map, initial_pos=None):
         self.map = map
@@ -118,8 +161,6 @@ class Character(pygame.sprite.Sprite):
         self.load_assets()
 
         self.tick = 0
-        self.anim_cycle = 10
-        self.agility = 4
 
         super().__init__()
 
@@ -139,7 +180,7 @@ class Character(pygame.sprite.Sprite):
                 break
             i += 1
         self.images = {(0, 0): image_list}
-        for i, direction in enumerate([(1, 0), (0, -1), (-1, 0), (0, 1)]):
+        for i, direction in enumerate(DIRECTIONS):
             self.images[direction] = [
                 pygame.transform.rotozoom(img, i * 90, 1)  if i != 2 else pygame.transform.flip(img, True, False)
                 for img in image_list
@@ -152,26 +193,6 @@ class Character(pygame.sprite.Sprite):
     @property
     def image(self):
         return self.images[self.ovx, self.vy if self.ovx == 0 else 0][self.tick // self.anim_cycle % 2]
-
-    def move_event(self, event):
-        if event.type == pygame.KEYDOWN:
-            key = event.key
-            if key == pygame.K_LEFT:
-                self.vx = -1
-                self.ovx = -1
-            elif key == pygame.K_RIGHT:
-                self.vx = 1
-                self.ovx = 0
-            if key == pygame.K_UP:
-                self.vy = -1
-            elif key == pygame.K_DOWN:
-                self.vy = 1
-        if event.type == pygame.KEYUP:
-            key = event.key
-            if key in (pygame.K_LEFT, pygame.K_RIGHT):
-                self.vx = 0
-            if key in (pygame.K_UP, pygame.K_DOWN):
-                self.vy = 0
 
     def update(self):
 
@@ -203,12 +224,46 @@ class Character(pygame.sprite.Sprite):
 class Player(Character):
     name = "pacman"
 
+    def move_event(self, event):
+        if event.type == pygame.KEYDOWN:
+            key = event.key
+            if key == pygame.K_LEFT:
+                self.vx = -1
+                self.ovx = -1
+            elif key == pygame.K_RIGHT:
+                self.vx = 1
+                self.ovx = 0
+            if key == pygame.K_UP:
+                self.vy = -1
+            elif key == pygame.K_DOWN:
+                self.vy = 1
+        if event.type == pygame.KEYUP:
+            key = event.key
+            if key in (pygame.K_LEFT, pygame.K_RIGHT):
+                self.vx = 0
+            if key in (pygame.K_UP, pygame.K_DOWN):
+                self.vy = 0
+
+
 class Ghost(Character):
     name = "ghost"
 
+    def best_path(self):
+        best = 100_000
+        heat_map = self.map.heat_map
+        choice = 0, 0
+        for path in DIRECTIONS:
+            path_pos = self.x + path[0], self.y + path[1]
+            if path_pos not in heat_map:
+                continue
+            if heat_map[path_pos] < best:
+                best = heat_map[path_pos]
+                choice = path
+        return choice
+
     def update(self):
-        if self.tick % 20 == 0:
-            self.vx, self.vy = random.choice([(1, 0), (0, -1), (-1, 0), (0, 1)])
+        if self.tick % 10 == 0:
+            self.vx, self.vy = self.best_path()
 
         super().update()
 
@@ -216,7 +271,9 @@ class Ghost(Character):
             print("GAME OVER")
             raise RuntimeError()
 
-
+    @property
+    def image(self):
+        return self.images[0, 0][self.tick // self.anim_cycle % 2]
 
 
 def main():
