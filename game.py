@@ -235,9 +235,23 @@ class Item(Character):
 class EnergyPill(Item):
     name = "pill"
 
+    def update(self):
+        if self.x == self.game.player.x and self.y == self.game.player.y:
+            self.game.player.power_up()
+            self.kill()
+
 
 class Player(Character):
     name = "pacman"
+
+    def __init__(self, *args, **kw):
+        self.powered = False
+        self.power_countdown = 0
+        super().__init__(*args, **kw)
+
+    def power_up(self):
+        self.powered = True
+        self.power_countdown = 10 * FPS
 
     def move_event(self, event):
         if event.type == pygame.KEYDOWN:
@@ -259,19 +273,30 @@ class Player(Character):
             if key in (pygame.K_UP, pygame.K_DOWN):
                 self.vy = 0
 
+    def update(self):
+        if self.powered:
+            self.power_countdown -= 1
+            if self.power_countdown <= 0:
+                self.powered = False
+        super().update()
+
 
 class Ghost(Character):
     name = "ghost"
 
     def best_path(self):
-        best = 100_000
+        attacking = not self.game.player.powered
+        best = 100_000 if attacking else 0
         heat_map = self.game.map.heat_map
         choice = 0, 0
         for path in DIRECTIONS:
             path_pos = self.x + path[0], self.y + path[1]
             if path_pos not in heat_map:
                 continue
-            if heat_map[path_pos] < best:
+            if heat_map[path_pos] < best and attacking:
+                best = heat_map[path_pos]
+                choice = path
+            elif heat_map[path_pos] > best and not attacking:
                 best = heat_map[path_pos]
                 choice = path
         return choice
@@ -283,7 +308,10 @@ class Ghost(Character):
         super().update()
 
         if self.game.player.x == self.x and self.game.player.y == self.y:
-            raise PlayerDied()
+            if not self.game.player.powered:
+                raise PlayerDied()
+            else:
+                self.kill()
 
     @property
     def image(self):
